@@ -1,0 +1,49 @@
+name: Trigger auto deployment for bibmcp-app-prod
+
+# When this action will be executed
+on:
+  # Automatically trigger it when detected changes in repo
+  push:
+    branches: 
+      [ main ]
+    paths:
+    - '**'
+    - '.github/workflows/bibmcp-app-prod-AutoDeployTrigger-fa477ee9-b8ed-4ba0-b7b5-052bb48c5ffe.yml'
+
+  # Allow manual trigger 
+  workflow_dispatch:      
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions: 
+      id-token: write #This is required for requesting the OIDC JWT Token
+      contents: read #Required when GH token is used to authenticate with private repo
+
+    steps:
+      - name: Checkout to the branch
+        uses: actions/checkout@v2
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.BIBMCPAPPPROD_AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.BIBMCPAPPPROD_AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.BIBMCPAPPPROD_AZURE_SUBSCRIPTION_ID }}
+
+      - name: Build and push container image to registry
+        uses: azure/container-apps-deploy-action@v2
+        with:
+          appSourcePath: ${{ github.workspace }}
+          _dockerfilePathKey_: _dockerfilePath_
+          _targetLabelKey_: _targetLabel_
+          registryUrl: bibmcpacr52590.azurecr.io
+          registryUsername: ${{ secrets.BIBMCPAPPPROD_REGISTRY_USERNAME }}
+          registryPassword: ${{ secrets.BIBMCPAPPPROD_REGISTRY_PASSWORD }}
+          containerAppName: bibmcp-app-prod
+          resourceGroup: bibliography-mcp-rg
+          imageToBuild: bibmcpacr52590.azurecr.io/bibmcp-app-prod:${{ github.sha }}
+          _buildArgumentsKey_: |
+            _buildArgumentsValues_
+
+
