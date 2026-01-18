@@ -17,6 +17,31 @@ export interface ValidationResult {
 const VALID_SOURCES: DataSource[] = ['semantic-scholar', 'crossref', 'dblp', 'openalex', 'arxiv'];
 
 /**
+ * Sanitize string input to prevent injection attacks
+ */
+export function sanitizeString(input: string): string {
+  // Remove any potential XSS or injection patterns
+  return input
+    .replace(/[<>]/g, '') // Remove angle brackets
+    .replace(/javascript:/gi, '') // Remove javascript: protocol
+    .replace(/on\w+\s*=/gi, '') // Remove event handlers
+    .trim();
+}
+
+/**
+ * Validate that a string is reasonable length
+ */
+export function validateStringLength(value: string, field: string, minLength = 1, maxLength = 500): ValidationError | null {
+  if (value.length < minLength) {
+    return { field, message: `${field} must be at least ${minLength} characters` };
+  }
+  if (value.length > maxLength) {
+    return { field, message: `${field} must be at most ${maxLength} characters` };
+  }
+  return null;
+}
+
+/**
  * Validate search_papers arguments
  */
 export function validateSearchPapers(args: Record<string, unknown> | undefined): ValidationResult {
@@ -24,6 +49,11 @@ export function validateSearchPapers(args: Record<string, unknown> | undefined):
 
   if (!args || typeof args.query !== 'string' || args.query.trim().length === 0) {
     errors.push({ field: 'query', message: 'Query is required and must be a non-empty string' });
+  } else {
+    const lengthError = validateStringLength(args.query, 'query', 1, 500);
+    if (lengthError) {
+      errors.push(lengthError);
+    }
   }
 
   if (args?.limit !== undefined) {
@@ -58,6 +88,11 @@ export function validateSearchByAuthor(args: Record<string, unknown> | undefined
 
   if (!args || typeof args.author !== 'string' || args.author.trim().length === 0) {
     errors.push({ field: 'author', message: 'Author is required and must be a non-empty string' });
+  } else {
+    const lengthError = validateStringLength(args.author, 'author', 1, 200);
+    if (lengthError) {
+      errors.push(lengthError);
+    }
   }
 
   if (args?.limit !== undefined) {
@@ -133,16 +168,32 @@ export function validateVerifyCitation(args: Record<string, unknown> | undefined
 
   if (!args || typeof args.title !== 'string' || args.title.trim().length === 0) {
     errors.push({ field: 'title', message: 'Title is required and must be a non-empty string' });
+  } else {
+    const lengthError = validateStringLength(args.title, 'title', 1, 500);
+    if (lengthError) {
+      errors.push(lengthError);
+    }
   }
 
-  if (args?.authors !== undefined && !Array.isArray(args.authors)) {
-    errors.push({ field: 'authors', message: 'Authors must be an array of strings' });
+  if (args?.authors !== undefined) {
+    if (!Array.isArray(args.authors)) {
+      errors.push({ field: 'authors', message: 'Authors must be an array of strings' });
+    } else if (args.authors.length > 50) {
+      errors.push({ field: 'authors', message: 'Authors array cannot have more than 50 items' });
+    }
   }
 
   if (args?.year !== undefined) {
     const year = Number(args.year);
     if (isNaN(year) || year < 1900 || year > new Date().getFullYear() + 1) {
       errors.push({ field: 'year', message: `Year must be a valid year between 1900 and ${new Date().getFullYear() + 1}` });
+    }
+  }
+
+  if (args?.venue !== undefined && typeof args.venue === 'string') {
+    const lengthError = validateStringLength(args.venue, 'venue', 1, 300);
+    if (lengthError) {
+      errors.push(lengthError);
     }
   }
 

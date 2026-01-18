@@ -40,8 +40,25 @@ const tools: Tool[] = [
   {
     name: 'search_papers',
     description: `Search for academic papers across multiple databases (Semantic Scholar, CrossRef, DBLP, OpenAlex, arXiv).
-Returns paper metadata including title, authors, year, venue, DOI, and citation count.
-Use this for finding papers by topic, title keywords, or general queries.`,
+
+This tool performs a comprehensive search across multiple academic databases and returns deduplicated results with metadata.
+
+**When to use**: Finding papers by topic, title keywords, author names, or general research queries.
+
+**Returns**: Paper metadata including:
+- Title, authors, and publication year
+- Venue/conference name and type
+- DOI and arXiv ID (when available)
+- Citation count and abstract
+- URLs for accessing the paper
+
+**Features**:
+- Multi-source aggregation with deduplication
+- Intelligent merging of metadata from multiple sources
+- Local caching for faster repeated searches
+- Configurable source selection
+
+**Example queries**: "attention is all you need", "graph neural networks", "transformer architecture"`,
     inputSchema: {
       type: 'object',
       properties: {
@@ -128,9 +145,35 @@ Returns complete metadata for arXiv preprints.`,
   {
     name: 'verify_citation',
     description: `Verify the accuracy of a citation against academic databases.
-Checks title, authors, year, venue, and DOI for correctness.
-Returns a confidence score and suggested corrections for any discrepancies.
-Use this to validate citations before including them in papers.`,
+
+This tool validates citation metadata by cross-referencing it against multiple authoritative sources.
+
+**When to use**: 
+- Before including citations in academic papers
+- To check if citation details are accurate
+- To find missing or incomplete citation information
+- To detect potential hallucinations in AI-generated citations
+
+**What it checks**:
+- Title accuracy (fuzzy matching with normalization)
+- Author list completeness and spelling
+- Publication year correctness
+- Venue/conference name accuracy
+- DOI validity
+
+**Returns**:
+- Verification status (verified/unverified)
+- Confidence score (0-100%)
+- Matched paper from databases
+- Suggested corrections for discrepancies
+- Warnings about potential issues
+- Sources consulted
+
+**Confidence scoring**:
+- 90-100%: Highly confident match
+- 75-89%: Good match with minor discrepancies
+- 60-74%: Possible match, review recommended
+- <60%: Low confidence, may be incorrect`,
     inputSchema: {
       type: 'object',
       properties: {
@@ -166,8 +209,33 @@ Use this to validate citations before including them in papers.`,
   {
     name: 'get_bibtex',
     description: `Generate a properly formatted BibTeX entry for a paper.
-Can look up by DOI, arXiv ID, or title search.
-Returns the BibTeX entry and source information.`,
+
+This tool creates publication-ready BibTeX entries with proper LaTeX escaping and formatting.
+
+**When to use**: 
+- Creating bibliography files for LaTeX documents
+- Generating citations for academic papers
+- Converting paper metadata to BibTeX format
+
+**Lookup methods** (in order of reliability):
+1. DOI - Most reliable, provides complete metadata
+2. arXiv ID - Good for preprints
+3. Title search - Fallback option, may need manual verification
+
+**Features**:
+- Automatic entry type detection (article, inproceedings, misc, etc.)
+- Proper LaTeX character escaping
+- Intelligent citation key generation
+- Support for custom citation keys
+- Multi-source metadata merging
+- Complete field population (authors, venue, DOI, abstract, etc.)
+
+**Returns**:
+- Formatted BibTeX entry
+- Citation key used
+- Source databases consulted
+- Warnings about missing or incomplete data
+- Paper metadata for verification`,
     inputSchema: {
       type: 'object',
       properties: {
