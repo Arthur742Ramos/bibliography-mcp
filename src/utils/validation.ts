@@ -17,7 +17,6 @@ export interface ValidationResult {
 const VALID_SOURCES: DataSource[] = ['semantic-scholar', 'crossref', 'dblp', 'openalex', 'arxiv'];
 
 // arXiv ID regex patterns
-const ARXIV_NEW_FORMAT = /^\d{4}\.\d{4,5}(v\d+)?$/;
 const ARXIV_ID_PATTERN = /^(\d{4}\.\d{4,5}(v\d+)?|[a-z-]+\/\d{7})$/i;
 
 /**
