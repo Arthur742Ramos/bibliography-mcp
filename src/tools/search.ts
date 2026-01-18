@@ -41,47 +41,59 @@ export async function searchPapers(
   const { limit = 10, sources = DEFAULT_SOURCES } = options;
   const cache = getCache();
 
-  // Check cache first
+  // Check cache for all sources and collect cached results
+  const allPapers: Paper[] = [];
+  const cachedSources: DataSource[] = [];
+  const uncachedSources: DataSource[] = [];
+
   for (const source of sources) {
     const cached = cache.getSearchResults(query, source);
     if (cached && cached.length > 0) {
-      return {
-        papers: cached.slice(0, limit),
-        totalResults: cached.length,
-        sourcesQueried: [source]
-      };
+      allPapers.push(...cached);
+      cachedSources.push(source);
+    } else {
+      uncachedSources.push(source);
     }
   }
 
-  // Query APIs in parallel
+  // If we have all sources cached, return deduplicated results
+  if (uncachedSources.length === 0) {
+    const deduplicated = deduplicatePapers(allPapers);
+    return {
+      papers: deduplicated.slice(0, limit),
+      totalResults: deduplicated.length,
+      sourcesQueried: cachedSources
+    };
+  }
+
+  // Query uncached APIs in parallel
   const searchPromises: Promise<Paper[]>[] = [];
   const activeSourcesForQuery: DataSource[] = [];
 
-  if (sources.includes('semantic-scholar')) {
+  if (uncachedSources.includes('semantic-scholar')) {
     searchPromises.push(semanticScholar.searchByTitle(query, limit));
     activeSourcesForQuery.push('semantic-scholar');
   }
-  if (sources.includes('crossref')) {
+  if (uncachedSources.includes('crossref')) {
     searchPromises.push(crossRef.searchByTitle(query, limit));
     activeSourcesForQuery.push('crossref');
   }
-  if (sources.includes('dblp')) {
+  if (uncachedSources.includes('dblp')) {
     searchPromises.push(dblp.searchByTitle(query, limit));
     activeSourcesForQuery.push('dblp');
   }
-  if (sources.includes('openalex')) {
+  if (uncachedSources.includes('openalex')) {
     searchPromises.push(openAlex.searchByTitle(query, limit));
     activeSourcesForQuery.push('openalex');
   }
-  if (sources.includes('arxiv')) {
+  if (uncachedSources.includes('arxiv')) {
     searchPromises.push(arxiv.searchByTitle(query, limit));
     activeSourcesForQuery.push('arxiv');
   }
 
   const results = await Promise.allSettled(searchPromises);
 
-  // Collect all successful results
-  const allPapers: Paper[] = [];
+  // Collect all successful results from API calls
   for (let i = 0; i < results.length; i++) {
     const result = results[i];
     if (result.status === 'fulfilled' && result.value.length > 0) {
@@ -91,13 +103,13 @@ export async function searchPapers(
     }
   }
 
-  // Deduplicate and merge results
+  // Deduplicate and merge results (includes both cached and fresh results)
   const deduplicated = deduplicatePapers(allPapers);
 
   return {
     papers: deduplicated.slice(0, limit),
     totalResults: deduplicated.length,
-    sourcesQueried: activeSourcesForQuery
+    sourcesQueried: [...cachedSources, ...activeSourcesForQuery]
   };
 }
 

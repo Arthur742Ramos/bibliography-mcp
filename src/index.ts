@@ -21,9 +21,19 @@ import { URL } from 'node:url';
 import { searchPapers, searchByAuthor } from './tools/search.js';
 import { getByDoi, getByArxivId } from './tools/lookup.js';
 import { verifyCitation } from './tools/verify.js';
-import { getBibTeX } from './tools/bibtex.js';
-import { closeCache } from './cache/sqlite.js';
+import { getBibTeX, getBibTeXBatch, formatBibTeXFile } from './tools/bibtex.js';
+import { closeCache, getCache } from './cache/sqlite.js';
 import { DataSource } from './types.js';
+import {
+  validateSearchPapers,
+  validateSearchByAuthor,
+  validateGetByDoi,
+  validateGetByArxiv,
+  validateVerifyCitation,
+  validateGetBibTeX,
+  validateGetBibTeXBatch,
+  formatValidationErrors
+} from './utils/validation.js';
 
 // Tool definitions
 const tools: Tool[] = [
@@ -179,6 +189,44 @@ Returns the BibTeX entry and source information.`,
         }
       }
     }
+  },
+  {
+    name: 'get_bibtex_batch',
+    description: `Generate BibTeX entries for multiple papers at once.
+Returns a formatted .bib file with all entries.
+Maximum 20 papers per request.`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        queries: {
+          type: 'array',
+          description: 'Array of paper lookup queries',
+          items: {
+            type: 'object',
+            properties: {
+              doi: {
+                type: 'string',
+                description: 'DOI of the paper'
+              },
+              arxiv_id: {
+                type: 'string',
+                description: 'arXiv ID of the paper'
+              },
+              title: {
+                type: 'string',
+                description: 'Paper title'
+              },
+              custom_key: {
+                type: 'string',
+                description: 'Custom citation key'
+              }
+            }
+          },
+          maxItems: 20
+        }
+      },
+      required: ['queries']
+    }
   }
 ];
 
@@ -207,6 +255,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   try {
     switch (name) {
       case 'search_papers': {
+        // Validate input
+        const validation = validateSearchPapers(args as Record<string, unknown>);
+        if (!validation.valid) {
+          return {
+            content: [{ type: 'text', text: formatValidationErrors(validation) }],
+            isError: true
+          };
+        }
+
         const query = args?.query as string;
         const limit = Math.min((args?.limit as number) || 10, 50);
         const sources = args?.sources as DataSource[] | undefined;
@@ -237,6 +294,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'search_by_author': {
+        // Validate input
+        const validation = validateSearchByAuthor(args as Record<string, unknown>);
+        if (!validation.valid) {
+          return {
+            content: [{ type: 'text', text: formatValidationErrors(validation) }],
+            isError: true
+          };
+        }
+
         const author = args?.author as string;
         const limit = Math.min((args?.limit as number) || 10, 50);
         const sources = args?.sources as DataSource[] | undefined;
@@ -266,6 +332,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'get_paper_by_doi': {
+        // Validate input
+        const validation = validateGetByDoi(args as Record<string, unknown>);
+        if (!validation.valid) {
+          return {
+            content: [{ type: 'text', text: formatValidationErrors(validation) }],
+            isError: true
+          };
+        }
+
         const doi = args?.doi as string;
         const result = await getByDoi(doi);
 
@@ -315,6 +390,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'get_paper_by_arxiv': {
+        // Validate input
+        const validation = validateGetByArxiv(args as Record<string, unknown>);
+        if (!validation.valid) {
+          return {
+            content: [{ type: 'text', text: formatValidationErrors(validation) }],
+            isError: true
+          };
+        }
+
         const arxivId = args?.arxiv_id as string;
         const result = await getByArxivId(arxivId);
 
@@ -352,6 +436,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'verify_citation': {
+        // Validate input
+        const validation = validateVerifyCitation(args as Record<string, unknown>);
+        if (!validation.valid) {
+          return {
+            content: [{ type: 'text', text: formatValidationErrors(validation) }],
+            isError: true
+          };
+        }
+
         const citation = {
           title: args?.title as string,
           authors: args?.authors as string[] | undefined,
@@ -388,25 +481,21 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'get_bibtex': {
+        // Validate input
+        const validation = validateGetBibTeX(args as Record<string, unknown>);
+        if (!validation.valid) {
+          return {
+            content: [{ type: 'text', text: formatValidationErrors(validation) }],
+            isError: true
+          };
+        }
+
         const options = {
           doi: args?.doi as string | undefined,
           arxivId: args?.arxiv_id as string | undefined,
           title: args?.title as string | undefined,
           customKey: args?.custom_key as string | undefined
         };
-
-        if (!options.doi && !options.arxivId && !options.title) {
-          return {
-            content: [
-              {
-                type: 'text',
-                text: JSON.stringify({
-                  error: 'At least one of doi, arxiv_id, or title must be provided'
-                }, null, 2)
-              }
-            ]
-          };
-        }
 
         const result = await getBibTeX(options);
 
@@ -425,6 +514,51 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                   year: result.paper.year,
                   doi: result.paper.doi
                 } : null
+              }, null, 2)
+            }
+          ]
+        };
+      }
+
+      case 'get_bibtex_batch': {
+        // Validate input
+        const validation = validateGetBibTeXBatch(args as Record<string, unknown>);
+        if (!validation.valid) {
+          return {
+            content: [{ type: 'text', text: formatValidationErrors(validation) }],
+            isError: true
+          };
+        }
+
+        const queries = (args?.queries as Array<{
+          doi?: string;
+          arxiv_id?: string;
+          title?: string;
+          custom_key?: string;
+        }>).map(q => ({
+          doi: q.doi,
+          arxivId: q.arxiv_id,
+          title: q.title,
+          customKey: q.custom_key
+        }));
+
+        const results = await getBibTeXBatch(queries);
+        const bibFile = formatBibTeXFile(results);
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                total_entries: results.filter(r => r.bibtex.length > 0).length,
+                total_requested: queries.length,
+                entries: results.map(r => ({
+                  entry_key: r.entryKey,
+                  source: r.source,
+                  warnings: r.warnings,
+                  success: r.bibtex.length > 0
+                })),
+                bib_file: bibFile
               }, null, 2)
             }
           ]
@@ -503,9 +637,30 @@ async function startHttpServer() {
     const method = req.method || 'GET';
     const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
 
+    // Health check endpoint
     if (method === 'GET' && url.pathname === '/health') {
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ status: 'ok' }));
+      try {
+        // Verify database connectivity
+        const cache = getCache();
+        const stats = cache.getStats();
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          status: 'ok',
+          version: '1.0.0',
+          cache: {
+            papers: stats.papers,
+            searches: stats.searches,
+            sizeBytes: stats.sizeBytes
+          }
+        }));
+      } catch (error) {
+        res.writeHead(503, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          status: 'error',
+          message: 'Database connection failed'
+        }));
+      }
       return;
     }
 

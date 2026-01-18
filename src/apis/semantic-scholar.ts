@@ -73,12 +73,17 @@ export class SemanticScholarClient implements ApiClient {
   private minRequestInterval: number = 100; // ms between requests
 
   constructor(apiKey?: string) {
+    // Use provided API key or fall back to environment variable
+    const effectiveApiKey = apiKey || process.env.SEMANTIC_SCHOLAR_API_KEY;
+
     const headers: Record<string, string> = {
       'Accept': 'application/json'
     };
 
-    if (apiKey) {
-      headers['x-api-key'] = apiKey;
+    if (effectiveApiKey) {
+      headers['x-api-key'] = effectiveApiKey;
+      // With API key, we can make more requests
+      this.minRequestInterval = 50;
     }
 
     this.client = axios.create({
@@ -171,9 +176,48 @@ export class SemanticScholarClient implements ApiClient {
   }
 
   async searchByAuthor(author: string, limit: number = 10): Promise<Paper[]> {
-    // Semantic Scholar doesn't have a direct author search for papers
-    // We search with the author name as part of the query
-    return this.searchByTitle(author, limit);
+    await this.rateLimit();
+
+    try {
+      // First try to find the author
+      const authorResponse = await axios.get<{
+        total: number;
+        data: Array<{ authorId: string; name: string; paperCount: number }>;
+      }>('https://api.semanticscholar.org/graph/v1/author/search', {
+        params: {
+          query: author,
+          limit: 1
+        },
+        timeout: 30000
+      });
+
+      if (authorResponse.data.data.length > 0) {
+        const authorId = authorResponse.data.data[0].authorId;
+
+        // Get papers by this author
+        await this.rateLimit();
+        const papersResponse = await this.client.get<{ data: S2Paper[] }>(
+          `/author/${authorId}/papers`,
+          {
+            params: {
+              fields: PAPER_FIELDS,
+              limit: Math.min(limit, 100)
+            }
+          }
+        );
+
+        return papersResponse.data.data.map(p => this.convertPaper(p));
+      }
+
+      // Fall back to title search with author name
+      return this.searchByTitle(author, limit);
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        console.error(`Semantic Scholar author search error: ${error.response?.status} - ${error.message}`);
+      }
+      // Fall back to title search
+      return this.searchByTitle(author, limit);
+    }
   }
 
   async getByDoi(doi: string): Promise<Paper | null> {

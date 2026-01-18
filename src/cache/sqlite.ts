@@ -9,7 +9,9 @@ import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const DEFAULT_DB_PATH = join(__dirname, '..', '..', 'data', 'cache.db');
+const DEFAULT_DB_PATH = process.env.CACHE_DIR
+  ? join(process.env.CACHE_DIR, 'cache.db')
+  : join(__dirname, '..', '..', 'data', 'cache.db');
 const DEFAULT_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 export class BibliographyCache {

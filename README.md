@@ -39,18 +39,23 @@ Add to your Claude Desktop configuration (`claude_desktop_config.json`):
 }
 ```
 
+## Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `MCP_TRANSPORT` | Transport mode: `stdio`, `http`, or `stdio,http` | `stdio` |
+| `PORT` | HTTP server port | `3000` |
+| `CACHE_DIR` | Directory for SQLite cache database | `./data` |
+| `SEMANTIC_SCHOLAR_API_KEY` | API key for Semantic Scholar (optional, increases rate limits) | - |
+
 ## HTTP Streaming (SSE)
 
-The server can run over streaming HTTP using Server-Sent Events (SSE), which is suitable for remote deployments.
+The server can run over streaming HTTP using Server-Sent Events (SSE), which is suitable for remote deployments. The server is public and does not require authentication.
 
 ### Endpoints
-- `GET /health` - health check
+- `GET /health` - health check (returns cache stats and database status)
 - `GET /sse` - opens SSE stream and returns a `sessionId`
 - `POST /messages?sessionId=...` - JSON-RPC messages for the session
-
-### Environment Variables
-- `MCP_TRANSPORT=http` (or `stdio,http` to enable both)
-- `PORT=3000`
 
 ### Example
 
@@ -135,6 +140,21 @@ Generate BibTeX entry for a paper.
   "custom_key": "vaswani2017attention"
 }
 ```
+
+### get_bibtex_batch
+Generate BibTeX entries for multiple papers at once (max 20).
+
+```json
+{
+  "queries": [
+    { "doi": "10.1145/1234567.1234568" },
+    { "arxiv_id": "2301.01234" },
+    { "title": "Attention Is All You Need", "custom_key": "vaswani2017" }
+  ]
+}
+```
+
+Returns a formatted `.bib` file with all entries.
 
 ## Azure Deployment
 
