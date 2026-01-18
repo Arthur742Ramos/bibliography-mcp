@@ -10,7 +10,7 @@ import { OpenAlexClient } from '../apis/openalex.js';
 import { ArxivClient } from '../apis/arxiv.js';
 import { getCache } from '../cache/sqlite.js';
 import { findBestMatch, paperSimilarity } from '../utils/similarity.js';
-import { normalizeDoi } from '../utils/normalize.js';
+import { normalizeDoi, getVenueTypePriority } from '../utils/normalize.js';
 
 interface SearchOptions {
   limit?: number;
@@ -227,19 +227,8 @@ function deduplicatePapers(papers: Paper[]): Paper[] {
  * Merge two paper records, preferring more complete data
  */
 function mergePapers(existing: Paper, newPaper: Paper): Paper {
-  // Venue type priority: journal > conference > workshop > book > thesis > arxiv > other
-  const venueTypePriority: Record<string, number> = {
-    'journal': 7,
-    'conference': 6,
-    'workshop': 5,
-    'book': 4,
-    'thesis': 3,
-    'arxiv': 2,
-    'other': 1
-  };
-  
-  const existingPriority = venueTypePriority[existing.venueType || 'other'] || 0;
-  const newPriority = venueTypePriority[newPaper.venueType || 'other'] || 0;
+  const existingPriority = getVenueTypePriority(existing.venueType);
+  const newPriority = getVenueTypePriority(newPaper.venueType);
   
   return {
     ...existing,

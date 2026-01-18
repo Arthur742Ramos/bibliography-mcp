@@ -8,7 +8,7 @@ import { CrossRefClient } from '../apis/crossref.js';
 import { OpenAlexClient } from '../apis/openalex.js';
 import { ArxivClient } from '../apis/arxiv.js';
 import { getCache } from '../cache/sqlite.js';
-import { normalizeDoi } from '../utils/normalize.js';
+import { normalizeDoi, getVenueTypePriority } from '../utils/normalize.js';
 
 // Client instances
 const semanticScholar = new SemanticScholarClient();
@@ -128,19 +128,8 @@ export async function getByArxivId(arxivId: string): Promise<LookupResult> {
  * Merge paper data from multiple sources
  */
 function mergePaperData(primary: Paper, secondary: Paper): Paper {
-  // Venue type priority: journal > conference > workshop > book > thesis > arxiv > other
-  const venueTypePriority: Record<string, number> = {
-    'journal': 7,
-    'conference': 6,
-    'workshop': 5,
-    'book': 4,
-    'thesis': 3,
-    'arxiv': 2,
-    'other': 1
-  };
-  
-  const primaryPriority = venueTypePriority[primary.venueType || 'other'] || 0;
-  const secondaryPriority = venueTypePriority[secondary.venueType || 'other'] || 0;
+  const primaryPriority = getVenueTypePriority(primary.venueType);
+  const secondaryPriority = getVenueTypePriority(secondary.venueType);
   
   return {
     ...primary,

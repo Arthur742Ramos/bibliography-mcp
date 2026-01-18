@@ -2,7 +2,28 @@
  * Utilities for normalizing paper metadata
  */
 
-import { Author } from '../types.js';
+import { Author, Paper } from '../types.js';
+
+/**
+ * Venue type priority for merging papers from multiple sources
+ * Higher values indicate higher priority
+ */
+export const VENUE_TYPE_PRIORITY: Record<string, number> = {
+  'journal': 7,
+  'conference': 6,
+  'workshop': 5,
+  'book': 4,
+  'thesis': 3,
+  'arxiv': 2,
+  'other': 1
+};
+
+/**
+ * Get venue type priority for a paper
+ */
+export function getVenueTypePriority(venueType?: Paper['venueType']): number {
+  return VENUE_TYPE_PRIORITY[venueType || 'other'] || 0;
+}
 
 /**
  * Normalize author name to "Firstname Lastname" format
