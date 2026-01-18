@@ -128,10 +128,24 @@ export async function getByArxivId(arxivId: string): Promise<LookupResult> {
  * Merge paper data from multiple sources
  */
 function mergePaperData(primary: Paper, secondary: Paper): Paper {
+  // Venue type priority: journal > conference > workshop > book > thesis > arxiv > other
+  const venueTypePriority: Record<string, number> = {
+    'journal': 7,
+    'conference': 6,
+    'workshop': 5,
+    'book': 4,
+    'thesis': 3,
+    'arxiv': 2,
+    'other': 1
+  };
+  
+  const primaryPriority = venueTypePriority[primary.venueType || 'other'] || 0;
+  const secondaryPriority = venueTypePriority[secondary.venueType || 'other'] || 0;
+  
   return {
     ...primary,
-    // Prefer DOI if available
-    doi: primary.doi || secondary.doi,
+    // Prefer DOI if available and normalize it
+    doi: primary.doi ? normalizeDoi(primary.doi) : (secondary.doi ? normalizeDoi(secondary.doi) : undefined),
     arxivId: primary.arxivId || secondary.arxivId,
     // Prefer longer/more complete fields
     title: primary.title.length >= secondary.title.length ? primary.title : secondary.title,
@@ -142,8 +156,8 @@ function mergePaperData(primary: Paper, secondary: Paper): Paper {
     authors: primary.authors.length >= secondary.authors.length
       ? mergeAuthors(primary.authors, secondary.authors)
       : mergeAuthors(secondary.authors, primary.authors),
-    // Prefer specific venue type
-    venueType: primary.venueType !== 'other' ? primary.venueType : secondary.venueType,
+    // Prefer venue type with higher priority
+    venueType: primaryPriority >= secondaryPriority ? primary.venueType : secondary.venueType,
     venue: primary.venue || secondary.venue,
     // Keep higher citation count
     citations: Math.max(primary.citations || 0, secondary.citations || 0),

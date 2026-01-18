@@ -7,6 +7,7 @@ import { Paper, DataSource, CacheEntry } from '../types.js';
 import { existsSync, mkdirSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
+import { normalizeDoi } from '../utils/normalize.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_DB_PATH = process.env.CACHE_DIR
@@ -69,7 +70,14 @@ export class BibliographyCache {
    */
   storePaper(paper: Paper): void {
     const now = Date.now();
-    const id = paper.doi || paper.arxivId || `${paper.source}:${this.hashTitle(paper.title)}`;
+    const normalizedDoi = paper.doi ? normalizeDoi(paper.doi) : null;
+    const id = normalizedDoi || paper.arxivId || `${paper.source}:${this.hashTitle(paper.title)}`;
+
+    // Ensure the stored paper has normalized DOI
+    const paperToStore = {
+      ...paper,
+      doi: normalizedDoi || paper.doi
+    };
 
     const stmt = this.db.prepare(`
       INSERT OR REPLACE INTO papers (id, doi, title, data, source, created_at, expires_at)
@@ -78,9 +86,9 @@ export class BibliographyCache {
 
     stmt.run(
       id,
-      paper.doi || null,
+      normalizedDoi,
       paper.title.toLowerCase(),
-      JSON.stringify(paper),
+      JSON.stringify(paperToStore),
       paper.source,
       now,
       now + this.ttlMs
@@ -103,11 +111,12 @@ export class BibliographyCache {
    * Get a paper by DOI
    */
   getByDoi(doi: string): Paper | null {
+    const normalizedDoi = normalizeDoi(doi);
     const stmt = this.db.prepare(`
       SELECT data FROM papers
       WHERE doi = ? AND expires_at > ?
     `);
-    const row = stmt.get(doi, Date.now()) as { data: string } | undefined;
+    const row = stmt.get(normalizedDoi, Date.now()) as { data: string } | undefined;
     return row ? JSON.parse(row.data) : null;
   }
 

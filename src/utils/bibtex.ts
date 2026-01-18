@@ -123,7 +123,7 @@ export function generateBibTeX(paper: Paper, customKey?: string): BibTeXEntry {
 
   // Required fields - sanitize and escape
   fields.title = `{${sanitizeBibTeXField(escapeLatex(paper.title))}}`;
-  fields.author = sanitizeBibTeXField(formatBibTeXAuthors(paper.authors));
+  fields.author = sanitizeBibTeXField(escapeLatex(formatBibTeXAuthors(paper.authors)));
 
   if (paper.year) {
     fields.year = paper.year.toString();
@@ -132,7 +132,7 @@ export function generateBibTeX(paper: Paper, customKey?: string): BibTeXEntry {
   // Optional fields based on entry type
   if (entryType === 'article') {
     if (paper.venue) {
-      fields.journal = sanitizeBibTeXField(paper.venue);
+      fields.journal = sanitizeBibTeXField(escapeLatex(paper.venue));
     }
     if (paper.volume) {
       fields.volume = sanitizeBibTeXField(paper.volume);
@@ -145,13 +145,13 @@ export function generateBibTeX(paper: Paper, customKey?: string): BibTeXEntry {
     }
   } else if (entryType === 'inproceedings') {
     if (paper.venue) {
-      fields.booktitle = sanitizeBibTeXField(paper.venue);
+      fields.booktitle = sanitizeBibTeXField(escapeLatex(paper.venue));
     }
     if (paper.pages) {
       fields.pages = sanitizeBibTeXField(paper.pages);
     }
     if (paper.publisher) {
-      fields.publisher = sanitizeBibTeXField(paper.publisher);
+      fields.publisher = sanitizeBibTeXField(escapeLatex(paper.publisher));
     }
   } else if (entryType === 'misc' && paper.arxivId) {
     fields.eprint = sanitizeBibTeXField(paper.arxivId);

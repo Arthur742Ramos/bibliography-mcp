@@ -7,7 +7,7 @@ import axios from 'axios';
 import { XMLParser } from 'fast-xml-parser';
 import { Paper, Author, ApiClient, DataSource } from '../types.js';
 
-const BASE_URL = 'http://export.arxiv.org/api/query';
+const BASE_URL = 'https://export.arxiv.org/api/query';
 
 interface ArxivAuthor {
   name: string;
