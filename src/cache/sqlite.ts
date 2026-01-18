@@ -73,10 +73,10 @@ export class BibliographyCache {
     const normalizedDoi = paper.doi ? normalizeDoi(paper.doi) : null;
     const id = normalizedDoi || paper.arxivId || `${paper.source}:${this.hashTitle(paper.title)}`;
 
-    // Ensure the stored paper has normalized DOI
+    // Ensure the stored paper has normalized DOI only
     const paperToStore = {
       ...paper,
-      doi: normalizedDoi || paper.doi
+      doi: normalizedDoi || undefined
     };
 
     const stmt = this.db.prepare(`

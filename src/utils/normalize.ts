@@ -22,7 +22,7 @@ export const VENUE_TYPE_PRIORITY: Record<string, number> = {
  * Get venue type priority for a paper
  */
 export function getVenueTypePriority(venueType?: Paper['venueType']): number {
-  return VENUE_TYPE_PRIORITY[venueType || 'other'] || 0;
+  return VENUE_TYPE_PRIORITY[venueType || 'other'] || VENUE_TYPE_PRIORITY['other'];
 }
 
 /**
