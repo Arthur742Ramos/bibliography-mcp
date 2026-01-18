@@ -16,6 +16,11 @@ export interface ValidationResult {
 
 const VALID_SOURCES: DataSource[] = ['semantic-scholar', 'crossref', 'dblp', 'openalex', 'arxiv'];
 
+// arXiv ID regex patterns
+const ARXIV_NEW_FORMAT = /^\d{4}\.\d{4,5}(v\d+)?$/;
+const ARXIV_OLD_FORMAT = /^[a-z-]+\/\d{7}$/i;
+const ARXIV_ID_PATTERN = /^(\d{4}\.\d{4,5}(v\d+)?|[a-z-]+\/\d{7})$/i;
+
 /**
  * Sanitize string input to prevent injection attacks
  */
@@ -147,9 +152,9 @@ export function validateGetByArxiv(args: Record<string, unknown> | undefined): V
   if (!args || typeof args.arxiv_id !== 'string' || args.arxiv_id.trim().length === 0) {
     errors.push({ field: 'arxiv_id', message: 'arXiv ID is required and must be a non-empty string' });
   } else {
-    // Basic arXiv ID format validation - combined regex for efficiency
+    // Basic arXiv ID format validation using constant pattern
     const arxivId = (args.arxiv_id as string).replace(/^arXiv:/i, '');
-    if (!arxivId.match(/^(\d{4}\.\d{4,5}(v\d+)?|[a-z-]+\/\d{7})$/i)) {
+    if (!ARXIV_ID_PATTERN.test(arxivId)) {
       errors.push({
         field: 'arxiv_id',
         message: 'Invalid arXiv ID format. Expected format: "2301.01234" or "cs/0701001"'

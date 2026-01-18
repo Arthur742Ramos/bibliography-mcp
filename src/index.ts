@@ -35,6 +35,13 @@ import {
   formatValidationErrors
 } from './utils/validation.js';
 
+/**
+ * Type guard to check if error has a string code property
+ */
+function hasErrorCode(error: unknown): error is Error & { code: string } {
+  return error instanceof Error && 'code' in error && typeof (error as any).code === 'string';
+}
+
 // Tool definitions
 const tools: Tool[] = [
   {
@@ -646,10 +653,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    // Safely extract error code with proper type checking
-    const errorCode = error instanceof Error && 'code' in error && typeof (error as any).code === 'string'
-      ? (error as any).code 
-      : 'UNKNOWN_ERROR';
+    // Safely extract error code using type guard
+    const errorCode = hasErrorCode(error) ? error.code : 'UNKNOWN_ERROR';
     
     return {
       content: [
