@@ -9,6 +9,9 @@
     "start": "node dist/index.js",
     "dev": "tsc --watch",
     "lint": "eslint src --ext .ts",
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
+    "test:watch": "node --experimental-vm-modules node_modules/jest/bin/jest.js --watch",
+    "test:coverage": "node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage",
     "clean": "rimraf dist"
   },
   "keywords": [
@@ -30,11 +33,14 @@
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.8",
+    "@types/jest": "^30.0.0",
     "@types/node": "^20.10.0",
     "@typescript-eslint/eslint-plugin": "^8.53.0",
     "@typescript-eslint/parser": "^8.53.0",
     "eslint": "^9.39.2",
+    "jest": "^30.2.0",
     "rimraf": "^5.0.5",
+    "ts-jest": "^29.4.6",
     "typescript": "^5.3.0"
   },
   "engines": {

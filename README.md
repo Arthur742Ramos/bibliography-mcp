@@ -215,9 +215,45 @@ npm run dev
 # Run linting
 npm run lint
 
+# Run tests
+npm test
+
+# Run tests with coverage
+npm run test:coverage
+
+# Run tests in watch mode
+npm run test:watch
+
 # Clean build
 npm run clean && npm run build
 ```
+
+## Testing
+
+The project includes comprehensive unit tests for core utilities:
+
+- **Validation utilities**: Input sanitization and validation for all MCP tools
+- **BibTeX generation**: LaTeX escaping and BibTeX formatting
+- **Normalization**: Author names, titles, venues, DOIs
+- **Similarity matching**: String comparison and paper matching algorithms
+- **Error handling**: Custom error types and hierarchy
+
+Run tests with:
+```bash
+npm test              # Run all tests
+npm run test:coverage # Generate coverage report
+npm run test:watch    # Watch mode for development
+```
+
+## Continuous Integration
+
+Pull requests are automatically validated with:
+- ESLint code quality checks
+- TypeScript compilation
+- Unit test execution
+- Test coverage reporting
+
+The CI pipeline runs on Node.js 18.x and 20.x to ensure compatibility.
 
 ## Architecture
 
