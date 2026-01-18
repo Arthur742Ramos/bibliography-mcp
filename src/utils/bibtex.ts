@@ -9,6 +9,9 @@ import { generateCitationKey } from './normalize.js';
  * Escape special LaTeX characters in a string
  */
 function escapeLatex(str: string): string {
+  // Handle backslash first to avoid double escaping
+  let result = str.replace(/\\/g, '\\textbackslash{}');
+  
   const replacements: Record<string, string> = {
     '&': '\\&',
     '%': '\\%',
@@ -21,12 +24,24 @@ function escapeLatex(str: string): string {
     '^': '\\textasciicircum{}'
   };
 
-  let result = str;
   for (const [char, replacement] of Object.entries(replacements)) {
     result = result.split(char).join(replacement);
   }
 
   return result;
+}
+
+/**
+ * Sanitize BibTeX field value to prevent injection
+ */
+function sanitizeBibTeXField(value: string): string {
+  // Remove any potential command injection patterns
+  return value
+    .replace(/\\input{/gi, '') // Block \input
+    .replace(/\\include{/gi, '') // Block \include
+    .replace(/\\def/gi, '') // Block \def
+    .replace(/\\let/gi, '') // Block \let
+    .trim();
 }
 
 /**
@@ -106,9 +121,9 @@ export function generateBibTeX(paper: Paper, customKey?: string): BibTeXEntry {
 
   const fields: Record<string, string> = {};
 
-  // Required fields
-  fields.title = `{${paper.title}}`;
-  fields.author = formatBibTeXAuthors(paper.authors);
+  // Required fields - sanitize and escape
+  fields.title = `{${sanitizeBibTeXField(escapeLatex(paper.title))}}`;
+  fields.author = sanitizeBibTeXField(formatBibTeXAuthors(paper.authors));
 
   if (paper.year) {
     fields.year = paper.year.toString();
@@ -117,46 +132,46 @@ export function generateBibTeX(paper: Paper, customKey?: string): BibTeXEntry {
   // Optional fields based on entry type
   if (entryType === 'article') {
     if (paper.venue) {
-      fields.journal = paper.venue;
+      fields.journal = sanitizeBibTeXField(paper.venue);
     }
     if (paper.volume) {
-      fields.volume = paper.volume;
+      fields.volume = sanitizeBibTeXField(paper.volume);
     }
     if (paper.issue) {
-      fields.number = paper.issue;
+      fields.number = sanitizeBibTeXField(paper.issue);
     }
     if (paper.pages) {
-      fields.pages = paper.pages;
+      fields.pages = sanitizeBibTeXField(paper.pages);
     }
   } else if (entryType === 'inproceedings') {
     if (paper.venue) {
-      fields.booktitle = paper.venue;
+      fields.booktitle = sanitizeBibTeXField(paper.venue);
     }
     if (paper.pages) {
-      fields.pages = paper.pages;
+      fields.pages = sanitizeBibTeXField(paper.pages);
     }
     if (paper.publisher) {
-      fields.publisher = paper.publisher;
+      fields.publisher = sanitizeBibTeXField(paper.publisher);
     }
   } else if (entryType === 'misc' && paper.arxivId) {
-    fields.eprint = paper.arxivId;
+    fields.eprint = sanitizeBibTeXField(paper.arxivId);
     fields.archiveprefix = 'arXiv';
     if (paper.url) {
-      fields.url = paper.url;
+      fields.url = sanitizeBibTeXField(paper.url);
     }
   }
 
   // Common optional fields
   if (paper.doi) {
-    fields.doi = paper.doi;
+    fields.doi = sanitizeBibTeXField(paper.doi);
   }
 
   if (paper.url && !fields.url) {
-    fields.url = paper.url;
+    fields.url = sanitizeBibTeXField(paper.url);
   }
 
   if (paper.abstract) {
-    fields.abstract = `{${escapeLatex(paper.abstract)}}`;
+    fields.abstract = `{${sanitizeBibTeXField(escapeLatex(paper.abstract))}}`;
   }
 
   if (paper.month) {

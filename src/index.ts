@@ -21,17 +21,51 @@ import { URL } from 'node:url';
 import { searchPapers, searchByAuthor } from './tools/search.js';
 import { getByDoi, getByArxivId } from './tools/lookup.js';
 import { verifyCitation } from './tools/verify.js';
-import { getBibTeX } from './tools/bibtex.js';
-import { closeCache } from './cache/sqlite.js';
+import { getBibTeX, getBibTeXBatch, formatBibTeXFile } from './tools/bibtex.js';
+import { closeCache, getCache } from './cache/sqlite.js';
 import { DataSource } from './types.js';
+import {
+  validateSearchPapers,
+  validateSearchByAuthor,
+  validateGetByDoi,
+  validateGetByArxiv,
+  validateVerifyCitation,
+  validateGetBibTeX,
+  validateGetBibTeXBatch,
+  formatValidationErrors
+} from './utils/validation.js';
+
+/**
+ * Type guard to check if error has a string code property
+ */
+function hasErrorCode(error: unknown): error is Error & { code: string } {
+  return error instanceof Error && 'code' in error && typeof error.code === 'string';
+}
 
 // Tool definitions
 const tools: Tool[] = [
   {
     name: 'search_papers',
     description: `Search for academic papers across multiple databases (Semantic Scholar, CrossRef, DBLP, OpenAlex, arXiv).
-Returns paper metadata including title, authors, year, venue, DOI, and citation count.
-Use this for finding papers by topic, title keywords, or general queries.`,
+
+This tool performs a comprehensive search across multiple academic databases and returns deduplicated results with metadata.
+
+**When to use**: Finding papers by topic, title keywords, author names, or general research queries.
+
+**Returns**: Paper metadata including:
+- Title, authors, and publication year
+- Venue/conference name and type
+- DOI and arXiv ID (when available)
+- Citation count and abstract
+- URLs for accessing the paper
+
+**Features**:
+- Multi-source aggregation with deduplication
+- Intelligent merging of metadata from multiple sources
+- Local caching for faster repeated searches
+- Configurable source selection
+
+**Example queries**: "attention is all you need", "graph neural networks", "transformer architecture"`,
     inputSchema: {
       type: 'object',
       properties: {
@@ -118,9 +152,35 @@ Returns complete metadata for arXiv preprints.`,
   {
     name: 'verify_citation',
     description: `Verify the accuracy of a citation against academic databases.
-Checks title, authors, year, venue, and DOI for correctness.
-Returns a confidence score and suggested corrections for any discrepancies.
-Use this to validate citations before including them in papers.`,
+
+This tool validates citation metadata by cross-referencing it against multiple authoritative sources.
+
+**When to use**: 
+- Before including citations in academic papers
+- To check if citation details are accurate
+- To find missing or incomplete citation information
+- To detect potential hallucinations in AI-generated citations
+
+**What it checks**:
+- Title accuracy (fuzzy matching with normalization)
+- Author list completeness and spelling
+- Publication year correctness
+- Venue/conference name accuracy
+- DOI validity
+
+**Returns**:
+- Verification status (verified/unverified)
+- Confidence score (0-100%)
+- Matched paper from databases
+- Suggested corrections for discrepancies
+- Warnings about potential issues
+- Sources consulted
+
+**Confidence scoring**:
+- 90-100%: Highly confident match
+- 75-89%: Good match with minor discrepancies
+- 60-74%: Possible match, review recommended
+- <60%: Low confidence, may be incorrect`,
     inputSchema: {
       type: 'object',
       properties: {
@@ -156,8 +216,33 @@ Use this to validate citations before including them in papers.`,
   {
     name: 'get_bibtex',
     description: `Generate a properly formatted BibTeX entry for a paper.
-Can look up by DOI, arXiv ID, or title search.
-Returns the BibTeX entry and source information.`,
+
+This tool creates publication-ready BibTeX entries with proper LaTeX escaping and formatting.
+
+**When to use**: 
+- Creating bibliography files for LaTeX documents
+- Generating citations for academic papers
+- Converting paper metadata to BibTeX format
+
+**Lookup methods** (in order of reliability):
+1. DOI - Most reliable, provides complete metadata
+2. arXiv ID - Good for preprints
+3. Title search - Fallback option, may need manual verification
+
+**Features**:
+- Automatic entry type detection (article, inproceedings, misc, etc.)
+- Proper LaTeX character escaping
+- Intelligent citation key generation
+- Support for custom citation keys
+- Multi-source metadata merging
+- Complete field population (authors, venue, DOI, abstract, etc.)
+
+**Returns**:
+- Formatted BibTeX entry
+- Citation key used
+- Source databases consulted
+- Warnings about missing or incomplete data
+- Paper metadata for verification`,
     inputSchema: {
       type: 'object',
       properties: {
@@ -178,6 +263,44 @@ Returns the BibTeX entry and source information.`,
           description: 'Custom citation key to use (optional)'
         }
       }
+    }
+  },
+  {
+    name: 'get_bibtex_batch',
+    description: `Generate BibTeX entries for multiple papers at once.
+Returns a formatted .bib file with all entries.
+Maximum 20 papers per request.`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        queries: {
+          type: 'array',
+          description: 'Array of paper lookup queries',
+          items: {
+            type: 'object',
+            properties: {
+              doi: {
+                type: 'string',
+                description: 'DOI of the paper'
+              },
+              arxiv_id: {
+                type: 'string',
+                description: 'arXiv ID of the paper'
+              },
+              title: {
+                type: 'string',
+                description: 'Paper title'
+              },
+              custom_key: {
+                type: 'string',
+                description: 'Custom citation key'
+              }
+            }
+          },
+          maxItems: 20
+        }
+      },
+      required: ['queries']
     }
   }
 ];
@@ -207,6 +330,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   try {
     switch (name) {
       case 'search_papers': {
+        // Validate input
+        const validation = validateSearchPapers(args as Record<string, unknown>);
+        if (!validation.valid) {
+          return {
+            content: [{ type: 'text', text: formatValidationErrors(validation) }],
+            isError: true
+          };
+        }
+
         const query = args?.query as string;
         const limit = Math.min((args?.limit as number) || 10, 50);
         const sources = args?.sources as DataSource[] | undefined;
@@ -237,6 +369,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'search_by_author': {
+        // Validate input
+        const validation = validateSearchByAuthor(args as Record<string, unknown>);
+        if (!validation.valid) {
+          return {
+            content: [{ type: 'text', text: formatValidationErrors(validation) }],
+            isError: true
+          };
+        }
+
         const author = args?.author as string;
         const limit = Math.min((args?.limit as number) || 10, 50);
         const sources = args?.sources as DataSource[] | undefined;
@@ -266,6 +407,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'get_paper_by_doi': {
+        // Validate input
+        const validation = validateGetByDoi(args as Record<string, unknown>);
+        if (!validation.valid) {
+          return {
+            content: [{ type: 'text', text: formatValidationErrors(validation) }],
+            isError: true
+          };
+        }
+
         const doi = args?.doi as string;
         const result = await getByDoi(doi);
 
@@ -315,6 +465,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'get_paper_by_arxiv': {
+        // Validate input
+        const validation = validateGetByArxiv(args as Record<string, unknown>);
+        if (!validation.valid) {
+          return {
+            content: [{ type: 'text', text: formatValidationErrors(validation) }],
+            isError: true
+          };
+        }
+
         const arxivId = args?.arxiv_id as string;
         const result = await getByArxivId(arxivId);
 
@@ -352,6 +511,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'verify_citation': {
+        // Validate input
+        const validation = validateVerifyCitation(args as Record<string, unknown>);
+        if (!validation.valid) {
+          return {
+            content: [{ type: 'text', text: formatValidationErrors(validation) }],
+            isError: true
+          };
+        }
+
         const citation = {
           title: args?.title as string,
           authors: args?.authors as string[] | undefined,
@@ -388,25 +556,21 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'get_bibtex': {
+        // Validate input
+        const validation = validateGetBibTeX(args as Record<string, unknown>);
+        if (!validation.valid) {
+          return {
+            content: [{ type: 'text', text: formatValidationErrors(validation) }],
+            isError: true
+          };
+        }
+
         const options = {
           doi: args?.doi as string | undefined,
           arxivId: args?.arxiv_id as string | undefined,
           title: args?.title as string | undefined,
           customKey: args?.custom_key as string | undefined
         };
-
-        if (!options.doi && !options.arxivId && !options.title) {
-          return {
-            content: [
-              {
-                type: 'text',
-                text: JSON.stringify({
-                  error: 'At least one of doi, arxiv_id, or title must be provided'
-                }, null, 2)
-              }
-            ]
-          };
-        }
 
         const result = await getBibTeX(options);
 
@@ -431,6 +595,51 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
 
+      case 'get_bibtex_batch': {
+        // Validate input
+        const validation = validateGetBibTeXBatch(args as Record<string, unknown>);
+        if (!validation.valid) {
+          return {
+            content: [{ type: 'text', text: formatValidationErrors(validation) }],
+            isError: true
+          };
+        }
+
+        const queries = (args?.queries as Array<{
+          doi?: string;
+          arxiv_id?: string;
+          title?: string;
+          custom_key?: string;
+        }>).map(q => ({
+          doi: q.doi,
+          arxivId: q.arxiv_id,
+          title: q.title,
+          customKey: q.custom_key
+        }));
+
+        const results = await getBibTeXBatch(queries);
+        const bibFile = formatBibTeXFile(results);
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                total_entries: results.filter(r => r.bibtex.length > 0).length,
+                total_requested: queries.length,
+                entries: results.map(r => ({
+                  entry_key: r.entryKey,
+                  source: r.source,
+                  warnings: r.warnings,
+                  success: r.bibtex.length > 0
+                })),
+                bib_file: bibFile
+              }, null, 2)
+            }
+          ]
+        };
+      }
+
       default:
         return {
           content: [
@@ -444,11 +653,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
+    // Safely extract error code using type guard
+    const errorCode = hasErrorCode(error) ? error.code : 'UNKNOWN_ERROR';
+    
     return {
       content: [
         {
           type: 'text',
-          text: JSON.stringify({ error: errorMessage }, null, 2)
+          text: JSON.stringify({ 
+            error: errorMessage,
+            code: errorCode,
+            tool: name
+          }, null, 2)
         }
       ],
       isError: true
@@ -503,9 +719,30 @@ async function startHttpServer() {
     const method = req.method || 'GET';
     const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
 
+    // Health check endpoint
     if (method === 'GET' && url.pathname === '/health') {
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ status: 'ok' }));
+      try {
+        // Verify database connectivity
+        const cache = getCache();
+        const stats = cache.getStats();
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          status: 'ok',
+          version: '1.0.0',
+          cache: {
+            papers: stats.papers,
+            searches: stats.searches,
+            sizeBytes: stats.sizeBytes
+          }
+        }));
+      } catch (error) {
+        res.writeHead(503, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          status: 'error',
+          message: 'Database connection failed'
+        }));
+      }
       return;
     }
 
