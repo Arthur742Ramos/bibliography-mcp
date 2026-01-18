@@ -646,8 +646,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    const errorCode = error instanceof Error && 'code' in error 
-      ? (error as { code: string }).code 
+    // Safely extract error code with proper type checking
+    const errorCode = error instanceof Error && 'code' in error && typeof (error as any).code === 'string'
+      ? (error as any).code 
       : 'UNKNOWN_ERROR';
     
     return {

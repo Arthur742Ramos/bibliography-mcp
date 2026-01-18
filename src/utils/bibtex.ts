@@ -9,6 +9,9 @@ import { generateCitationKey } from './normalize.js';
  * Escape special LaTeX characters in a string
  */
 function escapeLatex(str: string): string {
+  // Handle backslash first to avoid double escaping
+  let result = str.replace(/\\/g, '\\textbackslash{}');
+  
   const replacements: Record<string, string> = {
     '&': '\\&',
     '%': '\\%',
@@ -18,19 +21,11 @@ function escapeLatex(str: string): string {
     '{': '\\{',
     '}': '\\}',
     '~': '\\textasciitilde{}',
-    '^': '\\textasciicircum{}',
-    '\\': '\\textbackslash{}'
+    '^': '\\textasciicircum{}'
   };
 
-  let result = str;
-  // Handle backslash first to avoid double escaping
-  if (result.includes('\\')) {
-    result = result.replace(/\\/g, '\\textbackslash{}');
-  }
   for (const [char, replacement] of Object.entries(replacements)) {
-    if (char !== '\\') { // Skip backslash as already handled
-      result = result.split(char).join(replacement);
-    }
+    result = result.split(char).join(replacement);
   }
 
   return result;

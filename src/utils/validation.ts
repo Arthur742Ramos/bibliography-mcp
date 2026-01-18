@@ -147,9 +147,9 @@ export function validateGetByArxiv(args: Record<string, unknown> | undefined): V
   if (!args || typeof args.arxiv_id !== 'string' || args.arxiv_id.trim().length === 0) {
     errors.push({ field: 'arxiv_id', message: 'arXiv ID is required and must be a non-empty string' });
   } else {
-    // Basic arXiv ID format validation
+    // Basic arXiv ID format validation - combined regex for efficiency
     const arxivId = (args.arxiv_id as string).replace(/^arXiv:/i, '');
-    if (!arxivId.match(/^\d{4}\.\d{4,5}(v\d+)?$/) && !arxivId.match(/^[a-z-]+\/\d{7}$/i)) {
+    if (!arxivId.match(/^(\d{4}\.\d{4,5}(v\d+)?|[a-z-]+\/\d{7})$/i)) {
       errors.push({
         field: 'arxiv_id',
         message: 'Invalid arXiv ID format. Expected format: "2301.01234" or "cs/0701001"'
