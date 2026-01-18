@@ -6,9 +6,22 @@ A Model Context Protocol (MCP) server for accurate bibliography lookup, verifica
 
 - **Multi-source Search**: Query Semantic Scholar, CrossRef, DBLP, OpenAlex, and arXiv simultaneously
 - **Citation Verification**: Validate citations against real databases with confidence scoring
-- **BibTeX Generation**: Generate properly formatted BibTeX entries
+- **BibTeX Generation**: Generate properly formatted BibTeX entries with LaTeX escaping
 - **Cross-validation**: Merge data from multiple sources for accuracy
 - **Local Caching**: SQLite-based caching reduces API calls and enables offline lookups
+- **Security**: Input sanitization, validation, and protection against injection attacks
+- **Code Quality**: ESLint configured for TypeScript with recommended rules
+
+## Security Features
+
+This server implements multiple security measures:
+
+- **Input Sanitization**: All user inputs are sanitized to prevent XSS attacks
+- **String Length Validation**: Prevents DoS attacks via oversized inputs
+- **BibTeX Injection Prevention**: Sanitizes BibTeX fields to block LaTeX command injection
+- **Dependency Security**: Regular updates to address CVEs in dependencies
+- **Type Safety**: Full TypeScript implementation with strict type checking
+- **Error Handling**: Custom error types for better debugging and security
 
 ## Installation
 

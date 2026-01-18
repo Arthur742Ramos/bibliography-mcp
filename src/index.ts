@@ -646,11 +646,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorCode = error instanceof Error && 'code' in error 
+      ? (error as { code: string }).code 
+      : 'UNKNOWN_ERROR';
+    
     return {
       content: [
         {
           type: 'text',
-          text: JSON.stringify({ error: errorMessage }, null, 2)
+          text: JSON.stringify({ 
+            error: errorMessage,
+            code: errorCode,
+            tool: name
+          }, null, 2)
         }
       ],
       isError: true
