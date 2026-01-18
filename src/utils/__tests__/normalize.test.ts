@@ -196,12 +196,12 @@ describe('extractYear', () => {
   it('should extract 20xx years', () => {
     expect(extractYear('2001')).toBe(2001);
     expect(extractYear('2099')).toBe(2099);
-    expect(extractYear('2100')).toBe(2100);
   });
 
   it('should return undefined for no year', () => {
     expect(extractYear('No year here')).toBeUndefined();
     expect(extractYear('1899')).toBeUndefined(); // Too old
+    expect(extractYear('2100')).toBeUndefined(); // Too new
   });
 
   it('should return undefined for empty string', () => {
