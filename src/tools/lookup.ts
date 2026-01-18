@@ -8,7 +8,7 @@ import { CrossRefClient } from '../apis/crossref.js';
 import { OpenAlexClient } from '../apis/openalex.js';
 import { ArxivClient } from '../apis/arxiv.js';
 import { getCache } from '../cache/sqlite.js';
-import { normalizeDoi } from '../utils/normalize.js';
+import { normalizeDoi, getVenueTypePriority } from '../utils/normalize.js';
 
 // Client instances
 const semanticScholar = new SemanticScholarClient();
@@ -128,10 +128,13 @@ export async function getByArxivId(arxivId: string): Promise<LookupResult> {
  * Merge paper data from multiple sources
  */
 function mergePaperData(primary: Paper, secondary: Paper): Paper {
+  const primaryPriority = getVenueTypePriority(primary.venueType);
+  const secondaryPriority = getVenueTypePriority(secondary.venueType);
+  
   return {
     ...primary,
-    // Prefer DOI if available
-    doi: primary.doi || secondary.doi,
+    // Prefer DOI if available and normalize it (primary should already be normalized)
+    doi: primary.doi || (secondary.doi ? normalizeDoi(secondary.doi) : undefined),
     arxivId: primary.arxivId || secondary.arxivId,
     // Prefer longer/more complete fields
     title: primary.title.length >= secondary.title.length ? primary.title : secondary.title,
@@ -142,8 +145,8 @@ function mergePaperData(primary: Paper, secondary: Paper): Paper {
     authors: primary.authors.length >= secondary.authors.length
       ? mergeAuthors(primary.authors, secondary.authors)
       : mergeAuthors(secondary.authors, primary.authors),
-    // Prefer specific venue type
-    venueType: primary.venueType !== 'other' ? primary.venueType : secondary.venueType,
+    // Prefer venue type with higher priority
+    venueType: primaryPriority >= secondaryPriority ? primary.venueType : secondary.venueType,
     venue: primary.venue || secondary.venue,
     // Keep higher citation count
     citations: Math.max(primary.citations || 0, secondary.citations || 0),

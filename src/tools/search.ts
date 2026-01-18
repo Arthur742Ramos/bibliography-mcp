@@ -10,6 +10,7 @@ import { OpenAlexClient } from '../apis/openalex.js';
 import { ArxivClient } from '../apis/arxiv.js';
 import { getCache } from '../cache/sqlite.js';
 import { findBestMatch, paperSimilarity } from '../utils/similarity.js';
+import { normalizeDoi, getVenueTypePriority } from '../utils/normalize.js';
 
 interface SearchOptions {
   limit?: number;
@@ -178,10 +179,10 @@ function deduplicatePapers(papers: Paper[]): Paper[] {
   for (const paper of papers) {
     // Check by DOI first (most reliable)
     if (paper.doi) {
-      const normalizedDoi = paper.doi.toLowerCase();
+      const normalizedDoi = normalizeDoi(paper.doi);
       if (seen.has(`doi:${normalizedDoi}`)) {
         // Merge into existing paper
-        const existingIdx = uniquePapers.findIndex(p => p.doi?.toLowerCase() === normalizedDoi);
+        const existingIdx = uniquePapers.findIndex(p => p.doi && normalizeDoi(p.doi) === normalizedDoi);
         if (existingIdx >= 0) {
           uniquePapers[existingIdx] = mergePapers(uniquePapers[existingIdx], paper);
         }
@@ -226,10 +227,13 @@ function deduplicatePapers(papers: Paper[]): Paper[] {
  * Merge two paper records, preferring more complete data
  */
 function mergePapers(existing: Paper, newPaper: Paper): Paper {
+  const existingPriority = getVenueTypePriority(existing.venueType);
+  const newPriority = getVenueTypePriority(newPaper.venueType);
+  
   return {
     ...existing,
-    // Prefer DOI if available
-    doi: existing.doi || newPaper.doi,
+    // Prefer DOI if available and normalize it (existing should already be normalized)
+    doi: existing.doi || (newPaper.doi ? normalizeDoi(newPaper.doi) : undefined),
     arxivId: existing.arxivId || newPaper.arxivId,
     // Prefer longer/more complete fields
     abstract: (existing.abstract?.length || 0) >= (newPaper.abstract?.length || 0)
@@ -239,8 +243,8 @@ function mergePapers(existing: Paper, newPaper: Paper): Paper {
     authors: existing.authors.length >= newPaper.authors.length
       ? existing.authors
       : newPaper.authors,
-    // Prefer specific venue type
-    venueType: existing.venueType !== 'other' ? existing.venueType : newPaper.venueType,
+    // Prefer venue type with higher priority
+    venueType: existingPriority >= newPriority ? existing.venueType : newPaper.venueType,
     venue: existing.venue || newPaper.venue,
     // Keep higher citation count
     citations: Math.max(existing.citations || 0, newPaper.citations || 0),
