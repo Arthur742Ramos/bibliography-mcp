@@ -232,8 +232,8 @@ function mergePapers(existing: Paper, newPaper: Paper): Paper {
   
   return {
     ...existing,
-    // Prefer DOI if available and normalize it
-    doi: existing.doi ? normalizeDoi(existing.doi) : (newPaper.doi ? normalizeDoi(newPaper.doi) : undefined),
+    // Prefer DOI if available and normalize it (existing should already be normalized)
+    doi: existing.doi || (newPaper.doi ? normalizeDoi(newPaper.doi) : undefined),
     arxivId: existing.arxivId || newPaper.arxivId,
     // Prefer longer/more complete fields
     abstract: (existing.abstract?.length || 0) >= (newPaper.abstract?.length || 0)

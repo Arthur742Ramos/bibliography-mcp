@@ -133,8 +133,8 @@ function mergePaperData(primary: Paper, secondary: Paper): Paper {
   
   return {
     ...primary,
-    // Prefer DOI if available and normalize it
-    doi: primary.doi ? normalizeDoi(primary.doi) : (secondary.doi ? normalizeDoi(secondary.doi) : undefined),
+    // Prefer DOI if available and normalize it (primary should already be normalized)
+    doi: primary.doi || (secondary.doi ? normalizeDoi(secondary.doi) : undefined),
     arxivId: primary.arxivId || secondary.arxivId,
     // Prefer longer/more complete fields
     title: primary.title.length >= secondary.title.length ? primary.title : secondary.title,
