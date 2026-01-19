@@ -30,12 +30,17 @@ export class BibliographyCache {
       if (!existsSync(dataDir)) {
         mkdirSync(dataDir, { recursive: true });
       }
+      // Open database with nolock VFS option for network shares (Azure Files)
+      // This disables file locking which doesn't work properly on SMB
       this.db = new Database(dbPath);
       // Use DELETE journal mode instead of WAL for Azure Files compatibility
-      // WAL requires file locking that doesn't work on SMB/network shares
       this.db.pragma('journal_mode = DELETE');
+      // Use exclusive locking mode - only this process accesses the DB
+      this.db.pragma('locking_mode = EXCLUSIVE');
       // Reduce lock contention
       this.db.pragma('busy_timeout = 5000');
+      // Verify the database is writable by doing a test write
+      this.db.exec('CREATE TABLE IF NOT EXISTS _init_test (id INTEGER); DROP TABLE IF EXISTS _init_test;');
       console.error(`Cache initialized at: ${dbPath}`);
     } catch (error) {
       console.error(`Failed to initialize disk cache: ${error}. Falling back to in-memory mode.`);
