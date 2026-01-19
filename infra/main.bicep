@@ -30,6 +30,7 @@ var uniqueSuffix = uniqueString(resourceGroup().id)
 var logAnalyticsName = '${namePrefix}-logs-${uniqueSuffix}'
 var containerAppEnvName = '${namePrefix}-env-${uniqueSuffix}'
 var containerAppName = '${namePrefix}-app-${environment}'
+var storageName = 'bmcpst${uniqueSuffix}'
 
 // Log Analytics Workspace
 resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2022-10-01' = {
@@ -40,6 +41,35 @@ resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2022-10-01' = {
       name: 'PerGB2018'
     }
     retentionInDays: 30
+  }
+}
+
+// Storage Account for persistent cache
+resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' = {
+  name: storageName
+  location: location
+  sku: {
+    name: 'Standard_LRS'
+  }
+  kind: 'StorageV2'
+  properties: {
+    accessTier: 'Hot'
+    minimumTlsVersion: 'TLS1_2'
+    supportsHttpsTrafficOnly: true
+  }
+}
+
+// File share for SQLite cache persistence
+resource fileService 'Microsoft.Storage/storageAccounts/fileServices@2023-01-01' = {
+  parent: storageAccount
+  name: 'default'
+}
+
+resource fileShare 'Microsoft.Storage/storageAccounts/fileServices/shares@2023-01-01' = {
+  parent: fileService
+  name: 'bibliography-cache'
+  properties: {
+    shareQuota: 1 // 1 GB
   }
 }
 
@@ -58,9 +88,23 @@ resource containerAppEnvironment 'Microsoft.App/managedEnvironments@2023-05-01' 
   }
 }
 
+// Storage mount for cache persistence
+resource storageMount 'Microsoft.App/managedEnvironments/storages@2023-05-01' = {
+  parent: containerAppEnvironment
+  name: 'cache-storage'
+  properties: {
+    azureFile: {
+      accountName: storageAccount.name
+      accountKey: storageAccount.listKeys().keys[0].value
+      shareName: fileShare.name
+      accessMode: 'ReadWrite'
+    }
+  }
+}
+
 // Container App
-// Note: Uses ephemeral volume for SQLite cache. Cache resets on container restart
-// but avoids Azure Files locking issues. Cache falls back to in-memory if needed.
+// Note: Uses Azure Files with SQLite in DELETE journal mode (not WAL) for compatibility.
+// Single replica to avoid concurrent writes to the same SQLite database.
 resource containerApp 'Microsoft.App/containerApps@2023-05-01' = {
   name: containerAppName
   location: location
@@ -125,22 +169,14 @@ resource containerApp 'Microsoft.App/containerApps@2023-05-01' = {
       volumes: [
         {
           name: 'cache-volume'
-          storageType: 'EmptyDir'
+          storageType: 'AzureFile'
+          storageName: storageMount.name
         }
       ]
       scale: {
-        minReplicas: environment == 'prod' ? 1 : 0
-        maxReplicas: environment == 'prod' ? 3 : 1
-        rules: [
-          {
-            name: 'http-scaling'
-            http: {
-              metadata: {
-                concurrentRequests: '50'
-              }
-            }
-          }
-        ]
+        // Single replica to avoid SQLite concurrent write issues on Azure Files
+        minReplicas: 1
+        maxReplicas: 1
       }
     }
   }
@@ -150,3 +186,4 @@ resource containerApp 'Microsoft.App/containerApps@2023-05-01' = {
 output containerAppFqdn string = containerApp.properties.configuration.ingress.fqdn
 output containerAppUrl string = 'https://${containerApp.properties.configuration.ingress.fqdn}'
 output logAnalyticsWorkspaceId string = logAnalytics.id
+output storageAccountName string = storageAccount.name

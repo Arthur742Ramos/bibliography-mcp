@@ -31,8 +31,11 @@ export class BibliographyCache {
         mkdirSync(dataDir, { recursive: true });
       }
       this.db = new Database(dbPath);
-      // Test write to ensure file locking works (fails on Azure Files)
-      this.db.exec('PRAGMA journal_mode=WAL');
+      // Use DELETE journal mode instead of WAL for Azure Files compatibility
+      // WAL requires file locking that doesn't work on SMB/network shares
+      this.db.pragma('journal_mode = DELETE');
+      // Reduce lock contention
+      this.db.pragma('busy_timeout = 5000');
       console.error(`Cache initialized at: ${dbPath}`);
     } catch (error) {
       console.error(`Failed to initialize disk cache: ${error}. Falling back to in-memory mode.`);
