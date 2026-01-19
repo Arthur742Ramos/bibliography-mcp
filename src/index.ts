@@ -733,14 +733,18 @@ async function startHttpServer() {
           cache: {
             papers: stats.papers,
             searches: stats.searches,
-            sizeBytes: stats.sizeBytes
+            sizeBytes: stats.sizeBytes,
+            mode: stats.inMemory ? 'in-memory' : 'disk'
           }
         }));
       } catch (error) {
-        res.writeHead(503, { 'Content-Type': 'application/json' });
+        // Even if cache fails, server can still function
+        res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({
-          status: 'error',
-          message: 'Database connection failed'
+          status: 'degraded',
+          version: '1.0.0',
+          message: 'Cache unavailable, operating without caching',
+          error: error instanceof Error ? error.message : String(error)
         }));
       }
       return;

@@ -1,5 +1,6 @@
 /**
  * SQLite caching layer for bibliography data
+ * Falls back to in-memory mode if disk-based SQLite fails (e.g., on Azure Files)
  */
 
 import Database from 'better-sqlite3';
@@ -18,17 +19,35 @@ const DEFAULT_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 export class BibliographyCache {
   private db: Database.Database;
   private ttlMs: number;
+  private isInMemory: boolean = false;
 
   constructor(dbPath: string = DEFAULT_DB_PATH, ttlMs: number = DEFAULT_TTL_MS) {
-    // Ensure data directory exists
-    const dataDir = dirname(dbPath);
-    if (!existsSync(dataDir)) {
-      mkdirSync(dataDir, { recursive: true });
-    }
-
-    this.db = new Database(dbPath);
     this.ttlMs = ttlMs;
+    
+    // Try disk-based SQLite first, fall back to in-memory if it fails
+    try {
+      const dataDir = dirname(dbPath);
+      if (!existsSync(dataDir)) {
+        mkdirSync(dataDir, { recursive: true });
+      }
+      this.db = new Database(dbPath);
+      // Test write to ensure file locking works (fails on Azure Files)
+      this.db.exec('PRAGMA journal_mode=WAL');
+      console.error(`Cache initialized at: ${dbPath}`);
+    } catch (error) {
+      console.error(`Failed to initialize disk cache: ${error}. Falling back to in-memory mode.`);
+      this.db = new Database(':memory:');
+      this.isInMemory = true;
+    }
+    
     this.initialize();
+  }
+
+  /**
+   * Check if cache is running in memory-only mode
+   */
+  isMemoryMode(): boolean {
+    return this.isInMemory;
   }
 
   private initialize(): void {
@@ -192,7 +211,7 @@ export class BibliographyCache {
   /**
    * Get cache statistics
    */
-  getStats(): { papers: number; searches: number; sizeBytes: number } {
+  getStats(): { papers: number; searches: number; sizeBytes: number; inMemory: boolean } {
     const paperCount = this.db.prepare('SELECT COUNT(*) as count FROM papers').get() as { count: number };
     const searchCount = this.db.prepare('SELECT COUNT(*) as count FROM search_cache').get() as { count: number };
 
@@ -203,7 +222,8 @@ export class BibliographyCache {
     return {
       papers: paperCount.count,
       searches: searchCount.count,
-      sizeBytes: pageSize * pageCount
+      sizeBytes: pageSize * pageCount,
+      inMemory: this.isInMemory
     };
   }
 
