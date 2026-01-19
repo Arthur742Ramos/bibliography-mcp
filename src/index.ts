@@ -22,6 +22,7 @@ import { searchPapers, searchByAuthor } from './tools/search.js';
 import { getByDoi, getByArxivId } from './tools/lookup.js';
 import { verifyCitation } from './tools/verify.js';
 import { getBibTeX, getBibTeXBatch, formatBibTeXFile } from './tools/bibtex.js';
+import { getCitations, getReferences } from './tools/citations.js';
 import { closeCache, getCache } from './cache/sqlite.js';
 import { DataSource } from './types.js';
 import {
@@ -64,6 +65,7 @@ This tool performs a comprehensive search across multiple academic databases and
 - Intelligent merging of metadata from multiple sources
 - Local caching for faster repeated searches
 - Configurable source selection
+- Year range filtering
 
 **Example queries**: "attention is all you need", "graph neural networks", "transformer architecture"`,
     inputSchema: {
@@ -77,6 +79,14 @@ This tool performs a comprehensive search across multiple academic databases and
           type: 'number',
           description: 'Maximum number of results (default: 10, max: 50)',
           default: 10
+        },
+        year_min: {
+          type: 'number',
+          description: 'Minimum publication year (e.g., 2020)'
+        },
+        year_max: {
+          type: 'number',
+          description: 'Maximum publication year (e.g., 2024)'
         },
         sources: {
           type: 'array',
@@ -302,6 +312,92 @@ Maximum 20 papers per request.`,
       },
       required: ['queries']
     }
+  },
+  {
+    name: 'get_citations',
+    description: `Get papers that cite a given paper.
+
+This tool finds all papers that reference/cite a specific paper, useful for literature reviews and understanding a paper's impact.
+
+**When to use**:
+- Finding follow-up work that builds on a paper
+- Understanding a paper's influence in the field
+- Literature review and related work discovery
+
+**Lookup methods** (in order of reliability):
+1. DOI - Most reliable
+2. arXiv ID - Good for preprints
+3. Title - Fallback, finds best match first
+
+**Returns**:
+- Original paper metadata
+- List of citing papers with full metadata
+- Total citation count`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        doi: {
+          type: 'string',
+          description: 'DOI of the paper'
+        },
+        arxiv_id: {
+          type: 'string',
+          description: 'arXiv ID of the paper'
+        },
+        title: {
+          type: 'string',
+          description: 'Paper title (used if DOI/arXiv not provided)'
+        },
+        limit: {
+          type: 'number',
+          description: 'Maximum number of citing papers to return (default: 10, max: 100)',
+          default: 10
+        }
+      }
+    }
+  },
+  {
+    name: 'get_references',
+    description: `Get papers referenced by a given paper.
+
+This tool finds all papers cited in the bibliography/references section of a specific paper.
+
+**When to use**:
+- Finding foundational work a paper builds upon
+- Understanding the context and background of research
+- Building a reading list of related papers
+
+**Lookup methods** (in order of reliability):
+1. DOI - Most reliable
+2. arXiv ID - Good for preprints
+3. Title - Fallback, finds best match first
+
+**Returns**:
+- Original paper metadata
+- List of referenced papers with full metadata
+- Total reference count`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        doi: {
+          type: 'string',
+          description: 'DOI of the paper'
+        },
+        arxiv_id: {
+          type: 'string',
+          description: 'arXiv ID of the paper'
+        },
+        title: {
+          type: 'string',
+          description: 'Paper title (used if DOI/arXiv not provided)'
+        },
+        limit: {
+          type: 'number',
+          description: 'Maximum number of referenced papers to return (default: 10, max: 100)',
+          default: 10
+        }
+      }
+    }
   }
 ];
 
@@ -342,8 +438,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const query = args?.query as string;
         const limit = Math.min((args?.limit as number) || 10, 50);
         const sources = args?.sources as DataSource[] | undefined;
+        const yearMin = args?.year_min as number | undefined;
+        const yearMax = args?.year_max as number | undefined;
 
-        const result = await searchPapers(query, { limit, sources });
+        const result = await searchPapers(query, { limit, sources, yearMin, yearMax });
 
         return {
           content: [
@@ -634,6 +732,96 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                   success: r.bibtex.length > 0
                 })),
                 bib_file: bibFile
+              }, null, 2)
+            }
+          ]
+        };
+      }
+
+      case 'get_citations': {
+        const doi = args?.doi as string | undefined;
+        const arxivId = args?.arxiv_id as string | undefined;
+        const title = args?.title as string | undefined;
+        const limit = Math.min((args?.limit as number) || 10, 100);
+
+        if (!doi && !arxivId && !title) {
+          return {
+            content: [{ type: 'text', text: JSON.stringify({ error: 'At least one of doi, arxiv_id, or title must be provided' }, null, 2) }],
+            isError: true
+          };
+        }
+
+        const result = await getCitations({ doi, arxivId, title, limit });
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                paper: result.paper ? {
+                  title: result.paper.title,
+                  authors: result.paper.authors.map(a => a.name),
+                  year: result.paper.year,
+                  doi: result.paper.doi,
+                  arxiv_id: result.paper.arxivId
+                } : null,
+                total_citations: result.totalCitations,
+                citations_returned: result.citations.length,
+                source: result.source,
+                citing_papers: result.citations.map(p => ({
+                  title: p.title,
+                  authors: p.authors.map(a => a.name),
+                  year: p.year,
+                  venue: p.venue,
+                  doi: p.doi,
+                  arxiv_id: p.arxivId,
+                  citations: p.citations
+                }))
+              }, null, 2)
+            }
+          ]
+        };
+      }
+
+      case 'get_references': {
+        const doi = args?.doi as string | undefined;
+        const arxivId = args?.arxiv_id as string | undefined;
+        const title = args?.title as string | undefined;
+        const limit = Math.min((args?.limit as number) || 10, 100);
+
+        if (!doi && !arxivId && !title) {
+          return {
+            content: [{ type: 'text', text: JSON.stringify({ error: 'At least one of doi, arxiv_id, or title must be provided' }, null, 2) }],
+            isError: true
+          };
+        }
+
+        const result = await getReferences({ doi, arxivId, title, limit });
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                paper: result.paper ? {
+                  title: result.paper.title,
+                  authors: result.paper.authors.map(a => a.name),
+                  year: result.paper.year,
+                  doi: result.paper.doi,
+                  arxiv_id: result.paper.arxivId
+                } : null,
+                total_references: result.totalReferences,
+                references_returned: result.references.length,
+                source: result.source,
+                referenced_papers: result.references.map(p => ({
+                  title: p.title,
+                  authors: p.authors.map(a => a.name),
+                  year: p.year,
+                  venue: p.venue,
+                  doi: p.doi,
+                  arxiv_id: p.arxivId,
+                  citations: p.citations
+                }))
               }, null, 2)
             }
           ]

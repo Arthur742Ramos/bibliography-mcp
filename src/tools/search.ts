@@ -15,6 +15,8 @@ import { normalizeDoi, getVenueTypePriority } from '../utils/normalize.js';
 interface SearchOptions {
   limit?: number;
   sources?: DataSource[];
+  yearMin?: number;
+  yearMax?: number;
 }
 
 interface SearchResult {
@@ -39,22 +41,28 @@ export async function searchPapers(
   query: string,
   options: SearchOptions = {}
 ): Promise<SearchResult> {
-  const { limit = 10, sources = DEFAULT_SOURCES } = options;
+  const { limit = 10, sources = DEFAULT_SOURCES, yearMin, yearMax } = options;
   const cache = getCache();
+  const yearRange = (yearMin || yearMax) ? { min: yearMin, max: yearMax } : undefined;
 
   // Check cache for all sources and collect cached results
   const allPapers: Paper[] = [];
   const cachedSources: DataSource[] = [];
   const uncachedSources: DataSource[] = [];
 
-  for (const source of sources) {
-    const cached = cache.getSearchResults(query, source);
-    if (cached && cached.length > 0) {
-      allPapers.push(...cached);
-      cachedSources.push(source);
-    } else {
-      uncachedSources.push(source);
+  // Skip cache if year filter is applied (cache doesn't support filtered queries)
+  if (!yearRange) {
+    for (const source of sources) {
+      const cached = cache.getSearchResults(query, source);
+      if (cached && cached.length > 0) {
+        allPapers.push(...cached);
+        cachedSources.push(source);
+      } else {
+        uncachedSources.push(source);
+      }
     }
+  } else {
+    uncachedSources.push(...sources);
   }
 
   // If we have all sources cached, return deduplicated results
@@ -72,7 +80,7 @@ export async function searchPapers(
   const activeSourcesForQuery: DataSource[] = [];
 
   if (uncachedSources.includes('semantic-scholar')) {
-    searchPromises.push(semanticScholar.searchByTitle(query, limit));
+    searchPromises.push(semanticScholar.searchByTitle(query, limit, yearRange));
     activeSourcesForQuery.push('semantic-scholar');
   }
   if (uncachedSources.includes('crossref')) {
@@ -99,13 +107,25 @@ export async function searchPapers(
     const result = results[i];
     if (result.status === 'fulfilled' && result.value.length > 0) {
       allPapers.push(...result.value);
-      // Cache successful results
-      cache.storeSearchResults(query, activeSourcesForQuery[i], result.value);
+      // Cache successful results (only if no year filter)
+      if (!yearRange) {
+        cache.storeSearchResults(query, activeSourcesForQuery[i], result.value);
+      }
     }
   }
 
   // Deduplicate and merge results (includes both cached and fresh results)
-  const deduplicated = deduplicatePapers(allPapers);
+  let deduplicated = deduplicatePapers(allPapers);
+
+  // Apply year filter post-hoc for sources that don't support it natively
+  if (yearRange) {
+    deduplicated = deduplicated.filter(p => {
+      if (!p.year) return true; // Keep papers without year info
+      if (yearRange.min && p.year < yearRange.min) return false;
+      if (yearRange.max && p.year > yearRange.max) return false;
+      return true;
+    });
+  }
 
   return {
     papers: deduplicated.slice(0, limit),

@@ -131,7 +131,7 @@ export class DBLPClient implements ApiClient {
           format: 'json',
           h: Math.min(limit, 100)
         },
-        timeout: 30000
+        timeout: 8000
       });
 
       const hits = response.data.result.hits?.hit;
@@ -158,7 +158,7 @@ export class DBLPClient implements ApiClient {
           format: 'json',
           h: Math.min(limit, 100)
         },
-        timeout: 30000
+        timeout: 8000
       });
 
       const hits = response.data.result.hits?.hit;

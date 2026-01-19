@@ -74,7 +74,7 @@ export class OpenAlexClient implements ApiClient {
   constructor(email?: string) {
     this.client = axios.create({
       baseURL: BASE_URL,
-      timeout: 30000,
+      timeout: 8000,
       headers: {
         'Accept': 'application/json',
         'User-Agent': `BibliographyMCP/1.0 (mailto:${email || 'anonymous@example.com'})`

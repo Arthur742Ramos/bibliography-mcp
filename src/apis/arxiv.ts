@@ -135,7 +135,7 @@ export class ArxivClient implements ApiClient {
           sortBy: 'relevance',
           sortOrder: 'descending'
         },
-        timeout: 30000
+        timeout: 8000
       });
 
       const parsed = this.parser.parse(response.data) as ArxivResponse;
@@ -165,7 +165,7 @@ export class ArxivClient implements ApiClient {
           sortBy: 'submittedDate',
           sortOrder: 'descending'
         },
-        timeout: 30000
+        timeout: 8000
       });
 
       const parsed = this.parser.parse(response.data) as ArxivResponse;
@@ -197,7 +197,7 @@ export class ArxivClient implements ApiClient {
           id_list: normalized,
           max_results: 1
         },
-        timeout: 30000
+        timeout: 8000
       });
 
       const parsed = this.parser.parse(response.data) as ArxivResponse;
@@ -234,7 +234,7 @@ export class ArxivClient implements ApiClient {
           sortBy: 'relevance',
           sortOrder: 'descending'
         },
-        timeout: 30000
+        timeout: 8000
       });
 
       const parsed = this.parser.parse(response.data) as ArxivResponse;

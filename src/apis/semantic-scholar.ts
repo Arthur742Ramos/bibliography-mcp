@@ -8,6 +8,7 @@ import { Paper, Author, ApiClient, DataSource } from '../types.js';
 
 const BASE_URL = 'https://api.semanticscholar.org/graph/v1';
 const SEARCH_URL = 'https://api.semanticscholar.org/graph/v1/paper/search';
+const API_TIMEOUT = 8000; // 8 second timeout for faster fail
 
 // Fields to request from the API
 const PAPER_FIELDS = [
@@ -67,6 +68,16 @@ interface S2SearchResponse {
   data: S2Paper[];
 }
 
+interface S2CitationResponse {
+  data: Array<{ citingPaper: S2Paper }>;
+  next?: number;
+}
+
+interface S2ReferenceResponse {
+  data: Array<{ citedPaper: S2Paper }>;
+  next?: number;
+}
+
 export class SemanticScholarClient implements ApiClient {
   private client: AxiosInstance;
   private lastRequestTime: number = 0;
@@ -88,7 +99,7 @@ export class SemanticScholarClient implements ApiClient {
 
     this.client = axios.create({
       baseURL: BASE_URL,
-      timeout: 30000,
+      timeout: API_TIMEOUT,
       headers
     });
   }
@@ -153,17 +164,26 @@ export class SemanticScholarClient implements ApiClient {
     };
   }
 
-  async searchByTitle(title: string, limit: number = 10): Promise<Paper[]> {
+  async searchByTitle(title: string, limit: number = 10, yearRange?: { min?: number; max?: number }): Promise<Paper[]> {
     await this.rateLimit();
 
     try {
+      const params: Record<string, string | number> = {
+        query: title,
+        fields: PAPER_FIELDS,
+        limit: Math.min(limit, 100)
+      };
+
+      // Add year filter if specified
+      if (yearRange?.min || yearRange?.max) {
+        const min = yearRange.min || 1900;
+        const max = yearRange.max || new Date().getFullYear();
+        params.year = `${min}-${max}`;
+      }
+
       const response = await axios.get<S2SearchResponse>(SEARCH_URL, {
-        params: {
-          query: title,
-          fields: PAPER_FIELDS,
-          limit: Math.min(limit, 100)
-        },
-        timeout: 30000
+        params,
+        timeout: API_TIMEOUT
       });
 
       return response.data.data.map(p => this.convertPaper(p));
@@ -188,7 +208,7 @@ export class SemanticScholarClient implements ApiClient {
           query: author,
           limit: 1
         },
-        timeout: 30000
+        timeout: API_TIMEOUT
       });
 
       if (authorResponse.data.data.length > 0) {
@@ -274,6 +294,52 @@ export class SemanticScholarClient implements ApiClient {
       }
       console.error(`Semantic Scholar arXiv lookup error: ${error}`);
       return null;
+    }
+  }
+
+  /**
+   * Get papers that cite the given paper
+   */
+  async getCitations(paperId: string, limit: number = 10): Promise<Paper[]> {
+    await this.rateLimit();
+
+    try {
+      const response = await this.client.get<S2CitationResponse>(`/paper/${paperId}/citations`, {
+        params: {
+          fields: PAPER_FIELDS,
+          limit: Math.min(limit, 100)
+        }
+      });
+
+      return response.data.data
+        .filter(c => c.citingPaper && c.citingPaper.title)
+        .map(c => this.convertPaper(c.citingPaper));
+    } catch (error) {
+      console.error(`Semantic Scholar citations error: ${error}`);
+      return [];
+    }
+  }
+
+  /**
+   * Get papers referenced by the given paper
+   */
+  async getReferences(paperId: string, limit: number = 10): Promise<Paper[]> {
+    await this.rateLimit();
+
+    try {
+      const response = await this.client.get<S2ReferenceResponse>(`/paper/${paperId}/references`, {
+        params: {
+          fields: PAPER_FIELDS,
+          limit: Math.min(limit, 100)
+        }
+      });
+
+      return response.data.data
+        .filter(r => r.citedPaper && r.citedPaper.title)
+        .map(r => this.convertPaper(r.citedPaper));
+    } catch (error) {
+      console.error(`Semantic Scholar references error: ${error}`);
+      return [];
     }
   }
 }

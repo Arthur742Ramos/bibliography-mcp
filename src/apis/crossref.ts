@@ -62,7 +62,7 @@ export class CrossRefClient implements ApiClient {
 
     this.client = axios.create({
       baseURL: BASE_URL,
-      timeout: 30000,
+      timeout: 8000,
       headers
     });
   }
